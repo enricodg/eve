@@ -12,6 +12,7 @@ export {
   type SlackAuthorizationEventContext,
   type SlackAuthorizationRequiredHandler,
   type SlackBotToken,
+  type SlackBotTokenContext,
   type SlackChannel,
   type SlackChannelConfig,
   type SlackChannelCredentials,

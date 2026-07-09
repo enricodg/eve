@@ -90,6 +90,7 @@ export interface SlackEventContext extends SlackChannelContext, ChannelSessionOp
 export type {
   SlackApiResponse,
   SlackBotToken,
+  SlackBotTokenContext,
   SlackHandle,
   SlackThread,
 } from "#public/channels/slack/api.js";
@@ -233,6 +234,13 @@ export interface SlackChannelCredentials {
 export interface SlackReceiveTarget {
   readonly channelId: string;
   readonly threadTs?: string;
+  /**
+   * Workspace that owns {@link channelId}. Optional for single-workspace
+   * deployments; when set, function-form bot tokens receive it via
+   * {@link SlackBotTokenContext} and it seeds the session's `teamId` state,
+   * so proactive sessions resolve the owning workspace's token.
+   */
+  readonly teamId?: string;
   /**
    * Optional message posted into the Slack channel before the agent runs.
    * The post becomes the thread root and the first turn is threaded under
@@ -579,6 +587,7 @@ export function slackChannel(config: SlackChannelConfig = {}): SlackChannel {
       }
       const requestedThreadTs =
         typeof receiveTarget.threadTs === "string" ? receiveTarget.threadTs : "";
+      const teamId = typeof receiveTarget.teamId === "string" ? receiveTarget.teamId : undefined;
       const initialMessage = receiveTarget.initialMessage;
       if (initialMessage && requestedThreadTs.length > 0) {
         throw new Error(
@@ -592,7 +601,7 @@ export function slackChannel(config: SlackChannelConfig = {}): SlackChannel {
           botToken: config.credentials?.botToken,
           channelId,
           threadTs: "",
-          teamId: undefined,
+          teamId,
         });
         const postInput: { card: CardElement; fallbackText?: string } = {
           card: initialMessage.card,
@@ -614,7 +623,7 @@ export function slackChannel(config: SlackChannelConfig = {}): SlackChannel {
         state: {
           channelId,
           threadTs: threadTs || null,
-          teamId: null,
+          teamId: teamId ?? null,
           triggeringUserId: null,
         },
       });

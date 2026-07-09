@@ -2281,3 +2281,54 @@ describe("constrainAuthorizationRequired", () => {
     expect(handler.mock.calls[0]?.[2]).toBe(sessionCtx);
   });
 });
+
+describe("slackChannel().receive workspace context", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("threads target.teamId into session state and the initial-message token context", async () => {
+    const initialMessageTs = "1800000000.009999";
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true, ts: initialMessageTs }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const contexts: Array<{ teamId?: string } | undefined> = [];
+    const channel = slackChannel({
+      credentials: {
+        botToken: (context?: { teamId?: string }) => {
+          contexts.push(context);
+          return "xoxb-team-a";
+        },
+      },
+    });
+    const compiled = asCompiled(channel);
+    if (!compiled.receive) throw new Error("expected compiled.receive");
+    const send = vi.fn().mockResolvedValue({ id: "s", continuationToken: "ct" });
+    const { Card, CardText } = await import("#compiled/chat/index.js");
+
+    await compiled.receive(
+      {
+        message: "Start the digest.",
+        target: {
+          channelId: "C123",
+          teamId: "T777",
+          initialMessage: { card: Card({ children: [CardText("Digest")] }) },
+        },
+        auth: null,
+      },
+      { send },
+    );
+
+    expect(contexts.length).toBeGreaterThan(0);
+    expect(contexts[0]).toEqual({ teamId: "T777", channelId: "C123", threadTs: "" });
+    const [, options] = send.mock.calls[0]!;
+    expect(options.state).toMatchObject({ teamId: "T777", channelId: "C123" });
+  });
+});

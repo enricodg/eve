@@ -91,6 +91,26 @@ const response = await callSlackApi({
 if (!response.ok) throw new Error(String(response.error));
 ```
 
+Function-form tokens receive an optional `SlackBotTokenContext` —
+`{ teamId, channelId, threadTs }` — populated wherever the channel knows
+which workspace it is acting for: inbound bindings, interaction updates,
+inbound file staging, and proactive sessions. A multi-workspace
+installation (one distributed Slack app installed by many teams) can
+resolve each workspace's own token without Vercel Connect:
+
+```ts title="agent/channels/slack.ts"
+import { slackChannel } from "eve/channels/slack";
+
+export default slackChannel({
+  credentials: {
+    botToken: async (context) => lookupWorkspaceToken(context?.teamId), // your own store
+  },
+});
+```
+
+Zero-argument resolvers keep working unchanged, and string tokens ignore
+the context entirely.
+
 `callSlackApi` resolves function-form tokens (secret managers, Connect
 rotation) at call time and form-encodes the body — the only safe default,
 since Slack's JSON support is partial (`conversations.replies` rejects
@@ -140,7 +160,7 @@ events: {
 
 ### Proactive sessions
 
-Start a session without an inbound message through `receive(slack, { message, target, auth })` from a schedule `run` handler, or `args.receive(slack, ...)` from another channel. The proactive target shape is `{ channelId }`.
+Start a session without an inbound message through `receive(slack, { message, target, auth })` from a schedule `run` handler, or `args.receive(slack, ...)` from another channel. The proactive target shape is `{ channelId, teamId? }` — set `teamId` in multi-workspace installations so the session's posts resolve the owning workspace's token.
 
 ### Attachments
 

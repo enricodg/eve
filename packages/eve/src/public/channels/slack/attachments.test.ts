@@ -6,6 +6,7 @@ import {
   collectSlackFileParts,
   createSlackFetchFile,
 } from "#public/channels/slack/attachments.js";
+import type { SlackBotTokenContext } from "#public/channels/slack/api.js";
 import type { SlackAttachment } from "#public/channels/slack/inbound.js";
 import { DEFAULT_UPLOAD_POLICY, mergeUploadPolicy } from "#public/channels/upload-policy.js";
 
@@ -462,5 +463,30 @@ describe("buildSlackTurnMessage", () => {
     const content = result as Array<{ type: string }>;
     expect(content).toHaveLength(1);
     expect(content[0]).toBe(fileParts[0]);
+  });
+});
+
+describe("createSlackFetchFile workspace context", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("passes the owning workspace from files-pri URLs to function-form bot tokens", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(new Uint8Array([1]), { status: 200 }),
+    );
+    const contexts: Array<SlackBotTokenContext | undefined> = [];
+    const fetchFile = createSlackFetchFile({
+      botToken: (context) => {
+        contexts.push(context);
+        return "xoxb-team-a";
+      },
+    });
+
+    await fetchFile("https://files.slack.com/files-pri/T0AAA111-F0BBB222/report.csv");
+    expect(contexts).toEqual([{ teamId: "T0AAA111" }]);
+
+    await fetchFile("https://files.slack.com/a/b/cat.png");
+    expect(contexts[1]).toBeUndefined();
   });
 });

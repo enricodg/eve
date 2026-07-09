@@ -475,7 +475,9 @@ async function openFreeformModal(input: {
 
   const promptText = readPromptTextFromBlocks(input.interaction.messageBlocks);
   const view = buildFreeformModalView({ metadata, prompt: promptText });
-  const token = await resolveSlackBotToken(input.deps.config.credentials?.botToken);
+  const token = await resolveSlackBotToken(input.deps.config.credentials?.botToken, {
+    teamId: input.interaction.teamId,
+  });
 
   const response = await fetch("https://slack.com/api/views.open", {
     method: "POST",
@@ -565,6 +567,7 @@ async function handleViewSubmission(
       messageTs: metadata.messageTs,
       answerLabel: text,
       userId: triggeringUserId ?? undefined,
+      teamId: teamId ?? undefined,
       deps: _deps,
     }).catch((error: unknown) => {
       log.error("freeform answered-card update failed", { error });
@@ -591,7 +594,9 @@ async function updateAnsweredHitlCard(
     userId: hitlAction.user.id,
   });
 
-  const token = await resolveSlackBotToken(deps.config.credentials?.botToken);
+  const token = await resolveSlackBotToken(deps.config.credentials?.botToken, {
+    teamId: interaction.teamId,
+  });
   const response = await fetch("https://slack.com/api/chat.update", {
     method: "POST",
     headers: {
@@ -615,6 +620,7 @@ async function updateAnsweredFreeformCard(input: {
   readonly messageTs: string;
   readonly answerLabel: string;
   readonly userId?: string;
+  readonly teamId?: string;
   readonly deps: InteractionHandlerDeps;
 }): Promise<void> {
   const blocks = buildAnsweredBlocks({
@@ -622,7 +628,9 @@ async function updateAnsweredFreeformCard(input: {
     answerLabel: input.answerLabel,
     userId: input.userId,
   });
-  const token = await resolveSlackBotToken(input.deps.config.credentials?.botToken);
+  const token = await resolveSlackBotToken(input.deps.config.credentials?.botToken, {
+    teamId: input.teamId,
+  });
   const response = await fetch("https://slack.com/api/chat.update", {
     method: "POST",
     headers: {

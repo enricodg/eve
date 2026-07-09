@@ -5,6 +5,7 @@ import { createLogger } from "#internal/logging.js";
 import {
   resolveSlackBotToken,
   type SlackBotToken,
+  type SlackBotTokenContext,
   type SlackThread,
 } from "#public/channels/slack/api.js";
 import type { SlackAttachment, SlackMessage } from "#public/channels/slack/inbound.js";
@@ -158,6 +159,18 @@ export function buildSlackTurnMessage(
 }
 
 /**
+ * Slack private file URLs embed the owning workspace
+ * (`https://files.slack.com/files-pri/T…-F…/name`); extract it so
+ * function-form bot tokens can resolve per workspace when staging
+ * inbound attachments. Returns `undefined` for URLs without a team
+ * segment, leaving single-workspace resolution untouched.
+ */
+function slackFileUrlContext(url: string): SlackBotTokenContext | undefined {
+  const match = /\/files-pri\/(T[A-Z0-9]+)-/.exec(url);
+  return match ? { teamId: match[1] } : undefined;
+}
+
+/**
  * Creates a `fetchFile` function for the Slack channel.
  *
  * Returns `null` for URLs that don't belong to Slack so they pass
@@ -171,7 +184,7 @@ export function createSlackFetchFile(input: {
     if (!isSlackFileUrl(url)) {
       return null;
     }
-    const token = await resolveSlackBotToken(input.botToken);
+    const token = await resolveSlackBotToken(input.botToken, slackFileUrlContext(url));
     const response = await fetch(url, {
       headers: { authorization: `Bearer ${token}` },
     });

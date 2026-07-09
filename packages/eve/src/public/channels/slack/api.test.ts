@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Card, CardText } from "#compiled/chat/index.js";
 import { decodeSlackApiBody } from "#public/channels/slack/api-encoding.js";
-import { buildSlackBinding, callSlackApi } from "#public/channels/slack/api.js";
+import {
+  buildSlackBinding,
+  callSlackApi,
+  resolveSlackBotToken,
+  type SlackBotTokenContext,
+} from "#public/channels/slack/api.js";
 
 interface FetchCall {
   url: string;
@@ -657,5 +662,77 @@ describe("auto-anchor on first post", () => {
     await Promise.all([thread.post("a"), thread.post("b"), thread.post("c")]);
 
     expect(anchors).toHaveLength(1);
+  });
+});
+describe("workspace context for function-form bot tokens", () => {
+  let mock: ReturnType<typeof buildFetchMock>;
+
+  beforeEach(() => {
+    mock = buildFetchMock();
+    vi.stubGlobal("fetch", mock.fetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("passes { teamId, channelId, threadTs } to the resolver on binding API calls", async () => {
+    const contexts: Array<SlackBotTokenContext | undefined> = [];
+    const binding = buildSlackBinding({
+      botToken: (context) => {
+        contexts.push(context);
+        return "xoxb-team-a";
+      },
+      channelId: "C123",
+      threadTs: "1700000000.000001",
+      teamId: "T123",
+    });
+
+    await binding.thread.post("hello");
+
+    expect(contexts.length).toBeGreaterThan(0);
+    expect(contexts[0]).toEqual({
+      teamId: "T123",
+      channelId: "C123",
+      threadTs: "1700000000.000001",
+    });
+  });
+
+  it("keeps zero-argument resolvers working unchanged", async () => {
+    let resolved = 0;
+    const binding = buildSlackBinding({
+      botToken: () => {
+        resolved += 1;
+        return "xoxb-zero-arg";
+      },
+      channelId: "C123",
+      threadTs: "1700000000.000001",
+      teamId: "T123",
+    });
+
+    await binding.thread.post("hello");
+
+    expect(resolved).toBeGreaterThan(0);
+  });
+
+  it("resolveSlackBotToken forwards an explicit context to function tokens", async () => {
+    const contexts: Array<SlackBotTokenContext | undefined> = [];
+    const token = await resolveSlackBotToken(
+      (context) => {
+        contexts.push(context);
+        return "xoxb-team-b";
+      },
+      { teamId: "T456" },
+    );
+
+    expect(token).toBe("xoxb-team-b");
+    expect(contexts).toEqual([{ teamId: "T456" }]);
+  });
+
+  it("resolveSlackBotToken leaves string tokens and context-less calls untouched", async () => {
+    await expect(resolveSlackBotToken("xoxb-plain", { teamId: "T456" })).resolves.toBe(
+      "xoxb-plain",
+    );
+    await expect(resolveSlackBotToken(() => "xoxb-no-context")).resolves.toBe("xoxb-no-context");
   });
 });
